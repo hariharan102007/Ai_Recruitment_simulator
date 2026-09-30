@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "tsx server.ts",
+    "start": "node server.ts",
     "build": "npm run build --workspace=frontend",
     "lint": "npm run lint --workspace=frontend"
   },
