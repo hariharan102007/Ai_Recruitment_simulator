@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Candidate user profile and target career preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Auth UID" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "targetRole": { "type": "string", "maxLength": 100 },
+        "experienceLevel": { "type": "string", "maxLength": 50 },
+        "targetCompany": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "Resume": {
+      "title": "Resume",
+      "description": "Extracted candidate resume text and ATS score calibration report",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "userId": { "type": "string", "description": "Candidate user UID" },
+        "targetRole": { "type": "string", "maxLength": 100 },
+        "domain": { "type": "string", "maxLength": 100 },
+        "parsedText": { "type": "string", "maxLength": 50000 },
+        "atsScore": { "type": "number" },
+        "atsReport": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "targetRole", "parsedText", "createdAt"]
+    },
+    "AssessmentResult": {
+      "title": "AssessmentResult",
+      "description": "Evaluation scores for interview stages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "stageId": { "type": "string", "maxLength": 50 },
+        "score": { "type": "number" },
+        "evaluation": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "stageId", "score", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user profile collection where userId matches request.auth.uid"
+    },
+    "/resumes/{resumeId}": {
+      "schema": { "$ref": "#/entities/Resume" },
+      "description": "Candidate resumes collection indexed by candidate UID"
+    },
+    "/assessments/{assessmentId}": {
+      "schema": { "$ref": "#/entities/AssessmentResult" },
+      "description": "Assessment results across aptitude, coding, technical, and voice interview rounds"
+    }
+  }
+}

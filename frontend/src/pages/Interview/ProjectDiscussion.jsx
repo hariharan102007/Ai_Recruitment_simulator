@@ -2,31 +2,22 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiArrowRight, FiArrowLeft, FiBriefcase, FiDatabase, FiServer, FiShield, FiAlertTriangle, FiActivity } from 'react-icons/fi';
-import { Button, Card, Badge, ProgressBar, Textarea } from '@/components/ui';
-import { generateInterviewQuestionsForStage, evaluateStageAnswersWithAI } from '@/services/aiService';
+import { FiArrowRight, FiArrowLeft, FiBriefcase, FiDatabase, FiServer, FiShield, FiAlertTriangle, FiActivity, FiRefreshCw, FiLayers } from 'react-icons/fi';
+import { Button, Badge, ProgressBar, Textarea } from '@/components/ui';
+import { generateInterviewQuestionsForStage, evaluateStageAnswersWithAI, inferDomainAndSkills } from '@/services/aiService';
 import { updateScore } from '@/store/analyticsSlice';
 import { updateStageStatus } from '@/store/interviewSlice';
 import toast from 'react-hot-toast';
 
-const getCategoryIcon = (category) => {
-  const c = category?.toLowerCase();
-  if (c?.includes('database') || c?.includes('db')) return FiDatabase;
-  if (c?.includes('security') || c?.includes('auth')) return FiShield;
-  if (c?.includes('scalability') || c?.includes('scale') || c?.includes('architect')) return FiServer;
-  if (c?.includes('challenge') || c?.includes('error') || c?.includes('problem')) return FiAlertTriangle;
-  return FiBriefcase;
-};
-
 const ProjectDiscussion = () => {
   const dispatch = useDispatch();
 
-  // Select profile and ATS state
   const atsScore = useSelector((state) => state.resume.atsScore || 75);
-  const isSimulatedATS = !useSelector((state) => state.resume.atsScore);
-  const targetRole = useSelector((state) => state.resume.atsReport?.targetRole || 'Full Stack Developer');
+  const targetRole = useSelector((state) => state.resume.targetRole || state.resume.atsReport?.targetRole || 'Full Stack Developer');
   const resumeText = useSelector((state) => state.resume.parsedText || '');
-  const resumeProjects = useSelector((state) => state.resume.atsReport?.projects || []);
+  const atsReport = useSelector((state) => state.resume.atsReport);
+
+  const { domain, skills, projects: detectedProjects } = inferDomainAndSkills(resumeText, targetRole, atsReport);
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -37,36 +28,47 @@ const ProjectDiscussion = () => {
   const [submitted, setSubmitted] = useState(false);
   const [evaluation, setEvaluation] = useState(null);
 
-  useEffect(() => {
-    const fetchProjectQuestions = async () => {
-      try {
-        setLoading(true);
-        const data = await generateInterviewQuestionsForStage({
-          stageId: 'project',
-          atsScore,
-          targetRole,
-          resumeText,
-          projects: resumeProjects
-        });
-        setProjects(data.projects || []);
-      } catch (error) {
-        console.error('Failed to load project questions:', error);
-        toast.error('Failed to load dynamic project discussion.');
-      } finally {
-        setLoading(false);
+  const fetchProjectQuestions = async (forceNew = false) => {
+    try {
+      setLoading(true);
+      const data = await generateInterviewQuestionsForStage({
+        stageId: 'project',
+        atsScore,
+        targetRole,
+        resumeText,
+        projects: detectedProjects,
+        forceNew
+      });
+      setProjects(data.projects || []);
+      if (!selectedProject && data.projects?.length > 0) {
+        setSelectedProject(0);
       }
-    };
+    } catch (error) {
+      console.error('Failed to load project questions:', error);
+      toast.error('Failed to load project discussion questions.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProjectQuestions();
-  }, [atsScore, targetRole, resumeProjects]);
+  }, [atsScore, targetRole, resumeText]);
+
+  const handleRegenerate = async () => {
+    toast.loading('Synthesizing fresh project discussion questions...', { id: 'regen-proj' });
+    await fetchProjectQuestions(true);
+    toast.dismiss('regen-proj');
+    toast.success('Generated brand-new project questions');
+  };
 
   const handleSubmit = async () => {
-    const project = projects[selectedProject];
+    const project = projects[selectedProject ?? 0];
     if (!project) return;
 
-    // Check if at least some answers exist
     const totalAnswers = Object.keys(answers).length;
     if (totalAnswers === 0) {
-      return toast.error('Please answer the questions before submitting.');
+      return toast.error('Please formulate at least one answer before submission.');
     }
 
     try {
@@ -79,15 +81,14 @@ const ProjectDiscussion = () => {
       });
       setEvaluation(evalData);
 
-      // Save overall score to analytics and update stage status
       dispatch(updateScore({ stage: 'project', score: evalData.overallScore }));
       dispatch(updateStageStatus({ stageId: 'project', status: 'completed' }));
 
       setSubmitted(true);
-      toast.success('Project discussion evaluated by AI!');
+      toast.success('Project architecture evaluation complete');
     } catch (error) {
       console.error('Evaluation failed:', error);
-      toast.error('AI Evaluation failed. Please try again.');
+      toast.error('Evaluation failed. Please retry.');
     } finally {
       setEvaluating(false);
     }
@@ -96,8 +97,8 @@ const ProjectDiscussion = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 text-sm">AI is analyzing your projects and designing interview questions...</p>
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs text-slate-300">Formulating project architecture questions from your resume...</p>
       </div>
     );
   }
@@ -105,135 +106,151 @@ const ProjectDiscussion = () => {
   if (evaluating) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 text-sm">AI is evaluating your project discussion responses...</p>
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs text-slate-300">AI is evaluating portfolio design decisions and scalability answers...</p>
       </div>
     );
   }
 
   if (submitted && evaluation) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-3xl font-bold text-white mb-8">Project Discussion - Scorecard</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto space-y-6">
+        <div className="pb-2 border-b border-slate-800">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Project Architecture Scorecard</h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">Evaluation telemetry for {targetRole} ({domain}).</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {evaluation.scores?.map((s, i) => (
-            <div key={i} className="glass-card p-5">
-              <ProgressBar label={s.label} value={s.value} />
+            <div key={i} className="glass-card p-4 border border-slate-800">
+              <ProgressBar label={s.label} value={s.value} color="blue" />
             </div>
           ))}
         </div>
-        <div className="glass-card p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <FiActivity className="text-indigo-400" />
-            AI Project Feedback
+
+        <div className="glass-card p-6 border border-slate-800">
+          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <FiActivity className="text-blue-400" /> AI Project Evaluation Feedback
           </h3>
-          <div className="space-y-2 text-sm text-gray-300">
+          <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
             {evaluation.feedback?.map((fb, idx) => (
               <p key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                 {fb}
               </p>
             ))}
           </div>
         </div>
-        <Link to="/interview/system-design">
-          <Button icon={<FiArrowRight />} iconPosition="right">
-            Proceed to System Design
+
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => { setSubmitted(false); fetchProjectQuestions(true); }} icon={<FiRefreshCw />}>
+            Retake Discussion
           </Button>
-        </Link>
-      </motion.div>
-    );
-  }
-
-  if (selectedProject === null) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-3xl font-bold text-white mb-2">Project Discussion</h1>
-        <p className="text-gray-400 mb-6">Select a project to discuss in depth.</p>
-        
-        {/* ATS score notification */}
-        <div className="mb-8 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/50 text-sm text-gray-300 flex items-center justify-between">
-          <span>
-            {isSimulatedATS 
-              ? `ℹ️ No resume uploaded. Using simulated projects based on ATS Score of 75%.`
-              : `🎯 Projects loaded from your resume and customized for ATS Score: ${atsScore}%`}
-          </span>
-          {isSimulatedATS && <Link to="/resume" className="text-indigo-400 hover:underline">Upload Resume</Link>}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {projects.map((p, i) => (
-            <motion.div 
-              key={i} 
-              whileHover={{ y: -2 }} 
-              onClick={() => setSelectedProject(i)} 
-              className="glass-card glass-card-hover p-6 cursor-pointer"
-            >
-              <FiBriefcase className="w-8 h-8 text-indigo-400 mb-3" />
-              <h3 className="text-white font-semibold text-lg">{p.name}</h3>
-              <p className="text-gray-400 text-sm mt-1">{p.tech}</p>
-              <Badge variant="info" className="mt-3">{p.questions?.length || 0} Questions</Badge>
-            </motion.div>
-          ))}
+          <Link to="/interview/system-design">
+            <Button icon={<FiArrowRight />} iconPosition="right">
+              Proceed to System Design
+            </Button>
+          </Link>
         </div>
       </motion.div>
     );
   }
 
-  const project = projects[selectedProject];
-  const q = project.questions[currentQ];
-  const Icon = getCategoryIcon(q.category);
+  const project = projects[selectedProject ?? 0];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-wrap items-center justify-between pb-2 border-b border-slate-800 gap-4">
         <div>
-          <button 
-            onClick={() => { setSelectedProject(null); setCurrentQ(0); setAnswers({}); }} 
-            className="text-sm text-gray-400 hover:text-white mb-1 flex items-center gap-1"
-          >
-            <FiArrowLeft /> Change Project
-          </button>
-          <h1 className="text-xl font-bold text-white">{project.name}</h1>
-          <p className="text-gray-400 text-xs">Technologies: {project.tech}</p>
+          <h1 className="text-xl font-bold text-white">Project Architecture Discussion</h1>
+          <p className="text-xs text-slate-400 mt-0.5">Production decision-making, state modeling, and performance bottlenecks.</p>
         </div>
-        <Badge variant="info">Question {currentQ + 1} of {project.questions.length}</Badge>
-      </div>
-
-      <div className="glass-card p-8 mb-6 mt-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-            <Icon className="w-5 h-5 text-indigo-400" />
-          </div>
-          <Badge variant="info">{q.category}</Badge>
-        </div>
-        <p className="text-white text-lg font-medium mb-6">{q.q}</p>
-        <Textarea 
-          value={answers[currentQ] || ''} 
-          onChange={(e) => setAnswers({ ...answers, [currentQ]: e.target.value })}
-          placeholder="Describe your project choices, challenges, and implementation approach..." 
-          className="min-h-[180px]" 
-        />
-      </div>
-
-      <div className="flex justify-between">
-        <Button 
-          variant="secondary" 
-          onClick={() => setCurrentQ(Math.max(0, currentQ - 1))} 
-          disabled={currentQ === 0}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleRegenerate}
+          disabled={loading}
+          icon={<FiRefreshCw className={loading ? 'animate-spin' : ''} />}
         >
-          Previous
+          Regenerate Discussion
         </Button>
-        {currentQ < project.questions.length - 1 ? (
-          <Button onClick={() => setCurrentQ(currentQ + 1)} icon={<FiArrowRight />} iconPosition="right">
-            Next
-          </Button>
-        ) : (
-          <Button onClick={handleSubmit} variant="success">
-            Submit Discussion
-          </Button>
-        )}
       </div>
+
+      {/* Domain & Resume Context Banner */}
+      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <FiLayers className="text-blue-400 shrink-0" />
+          <span>Resume Domain: <strong className="text-white">{domain}</strong> · Role: <strong className="text-white">{targetRole}</strong></span>
+        </div>
+        <Badge variant="info">ATS {atsScore}%</Badge>
+      </div>
+
+      {/* Project Selector Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {projects.map((p, idx) => (
+          <button
+            key={idx}
+            onClick={() => { setSelectedProject(idx); setCurrentQ(0); }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer border ${
+              (selectedProject ?? 0) === idx
+                ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {project && (
+        <div className="glass-card p-6 border border-slate-800 space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div>
+              <h2 className="text-base font-bold text-white">{project.name}</h2>
+              <p className="text-[11px] text-blue-400 font-mono mt-0.5">Stack: {project.tech}</p>
+            </div>
+            <span className="text-xs text-slate-400 font-mono">Question {currentQ + 1} of {project.questions?.length || 1}</span>
+          </div>
+
+          {project.questions?.[currentQ] && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="info">{project.questions[currentQ].category}</Badge>
+              </div>
+              <p className="text-white text-base font-medium leading-relaxed">
+                {project.questions[currentQ].q}
+              </p>
+              <Textarea
+                value={answers[currentQ] || ''}
+                onChange={(e) => setAnswers({ ...answers, [currentQ]: e.target.value })}
+                placeholder="Explain the architectural choices, tradeoffs, and scaling bottlenecks you addressed..."
+                className="min-h-[200px] bg-slate-900 border-slate-700 text-xs leading-relaxed"
+              />
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+            <Button
+              variant="secondary"
+              onClick={() => setCurrentQ(Math.max(0, currentQ - 1))}
+              disabled={currentQ === 0}
+              icon={<FiArrowLeft />}
+            >
+              Previous
+            </Button>
+
+            {currentQ < (project.questions?.length || 1) - 1 ? (
+              <Button onClick={() => setCurrentQ(currentQ + 1)} icon={<FiArrowRight />} iconPosition="right">
+                Next Question
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} variant="success">
+                Submit Project Discussion
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

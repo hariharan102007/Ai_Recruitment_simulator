@@ -5,18 +5,19 @@ import { FiHome, FiFileText, FiCode, FiMessageSquare, FiBriefcase, FiBox, FiHear
 import { toggleSidebar } from '@/store/uiSlice';
 
 const menuItems = [
-  { icon: FiHome, label: 'Dashboard', path: '/dashboard' },
-  { icon: FiFileText, label: 'Resume & ATS', path: '/resume' },
-  { icon: FiBookOpen, label: 'Aptitude', path: '/aptitude' },
-  { icon: FiCode, label: 'Coding', path: '/coding' },
-  { icon: FiMessageSquare, label: 'Technical', path: '/interview/technical' },
-  { icon: FiBriefcase, label: 'Project', path: '/interview/project' },
-  { icon: FiBox, label: 'System Design', path: '/interview/system-design' },
-  { icon: FiHeart, label: 'HR Interview', path: '/interview/hr' },
-  { icon: FiMic, label: 'Voice Mode', path: '/voice-interview' },
-  { icon: FiAward, label: 'Company Mode', path: '/company' },
-  { icon: FiBarChart2, label: 'Analytics', path: '/analytics' },
-  { icon: FiAward, label: 'Reports', path: '/reports' },
+  { icon: FiHome, label: 'Overview', path: '/dashboard', section: 'Core' },
+  { icon: FiFileText, label: 'Resume & ATS', path: '/resume', section: 'Calibration' },
+  { icon: FiBookOpen, label: 'Aptitude Math', path: '/aptitude', section: 'Assessments' },
+  { icon: FiCode, label: 'Code Execution', path: '/coding', section: 'Assessments' },
+  { icon: FiMessageSquare, label: 'Technical Round', path: '/interview/technical', section: 'Interviews' },
+  { icon: FiBriefcase, label: 'Project Architecture', path: '/interview/project', section: 'Interviews' },
+  { icon: FiBox, label: 'System Design', path: '/interview/system-design', section: 'Interviews' },
+  { icon: FiHeart, label: 'Behavioral HR', path: '/interview/hr', section: 'Interviews' },
+  { icon: FiMic, label: 'Voice Speech Mode', path: '/voice-interview', section: 'Interviews' },
+  { icon: FiAward, label: 'Company Tracks', path: '/company', section: 'Simulation' },
+  { icon: FiBarChart2, label: 'Analytics Telemetry', path: '/analytics', section: 'Reports' },
+  { icon: FiAward, label: 'Hiring Report', path: '/reports', section: 'Reports' },
+  { icon: FiSettings, label: 'Platform Settings', path: '/settings', section: 'Settings' },
 ];
 
 const Sidebar = () => {
@@ -26,38 +27,42 @@ const Sidebar = () => {
 
   return (
     <motion.aside
-      animate={{ width: sidebarOpen ? 256 : 72 }}
-      transition={{ duration: 0.2 }}
-      className="fixed left-0 top-16 bottom-0 z-40 glass border-r border-white/5 flex flex-col"
+      animate={{ width: sidebarOpen ? 240 : 64 }}
+      transition={{ duration: 0.15 }}
+      className="fixed left-0 top-16 bottom-0 z-40 bg-[#0B101B] border-r border-slate-800 flex flex-col"
     >
-      <div className="flex-1 overflow-y-auto py-4 px-2">
-        <nav className="space-y-1">
+      <div className="flex-1 overflow-y-auto py-3 px-2">
+        <nav className="space-y-0.5">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors ${
                   isActive
-                    ? 'bg-gradient-to-r from-indigo-600/20 to-purple-600/20 text-white border border-indigo-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-slate-800/90 text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                <item.icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : ''}`} />
-                {sidebarOpen && <span className="whitespace-nowrap">{item.label}</span>}
+                {isActive && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-blue-500 rounded-r-full" />
+                )}
+                <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-400'}`} />
+                {sidebarOpen && <span className="truncate">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
       </div>
 
-      <div className="p-2 border-t border-white/5">
+      <div className="p-2 border-t border-slate-800">
         <button
           onClick={() => dispatch(toggleSidebar())}
-          className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-800/80 text-slate-400 hover:text-white transition-colors cursor-pointer"
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         >
-          {sidebarOpen ? <FiChevronLeft className="w-5 h-5" /> : <FiChevronRight className="w-5 h-5" />}
+          {sidebarOpen ? <FiChevronLeft className="w-4 h-4" /> : <FiChevronRight className="w-4 h-4" />}
         </button>
       </div>
     </motion.aside>

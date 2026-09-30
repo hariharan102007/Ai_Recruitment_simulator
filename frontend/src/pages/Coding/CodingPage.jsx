@@ -2,28 +2,34 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiPlay, FiSend, FiArrowRight, FiCheck, FiX } from 'react-icons/fi';
+import { FiPlay, FiSend, FiArrowRight, FiCheck, FiX, FiRefreshCw, FiLayers, FiCode, FiTerminal } from 'react-icons/fi';
 import Editor from '@monaco-editor/react';
-import { Button, Badge, Card } from '@/components/ui';
+import { Button, Badge } from '@/components/ui';
 import { selectProblem, setLanguage, setCode, runCode, submitCode, fetchCodingProblems } from '@/store/codingSlice';
 import { updateScore } from '@/store/analyticsSlice';
 import { updateStageStatus } from '@/store/interviewSlice';
+import { inferDomainAndSkills } from '@/services/aiService';
 import toast from 'react-hot-toast';
 
 const languages = [
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'python', label: 'Python' },
-  { value: 'java', label: 'Java' },
+  { value: 'javascript', label: 'JavaScript (Node 20)' },
+  { value: 'python', label: 'Python (3.11)' },
+  { value: 'java', label: 'Java (OpenJDK 21)' },
 ];
 
 const CodingPage = () => {
   const dispatch = useDispatch();
   const { problems, selectedProblem, language, code, output, testResults, isRunning, isSubmitted, submissionResult, loading } = useSelector((state) => state.coding);
-  const atsScore = useSelector((state) => state.resume.atsScore);
+  const { atsScore, atsReport, parsedText, targetRole } = useSelector((state) => state.resume);
+  const currentAtsScore = atsScore || 75;
+
+  const { domain, skills } = inferDomainAndSkills(parsedText, targetRole || atsReport?.targetRole, atsReport);
 
   useEffect(() => {
-    dispatch(fetchCodingProblems());
-  }, [dispatch]);
+    if (!problems || problems.length === 0) {
+      dispatch(fetchCodingProblems());
+    }
+  }, [dispatch, problems]);
 
   useEffect(() => {
     if (isSubmitted && submissionResult) {
@@ -33,49 +39,96 @@ const CodingPage = () => {
   }, [isSubmitted, submissionResult, dispatch]);
 
   const handleRun = () => {
-    if (!selectedProblem) return toast.error('Select a problem first');
+    if (!selectedProblem) return toast.error('Select a challenge first');
     dispatch(runCode({ code, problem: selectedProblem, language }));
   };
 
   const handleSubmit = () => {
     if (!selectedProblem) return;
     dispatch(submitCode({ code, problem: selectedProblem }));
-    toast.success('Code submitted!');
+    toast.success('Submitted solution for automated AI evaluation');
   };
 
-  const handleEditorChange = (val) => { dispatch(setCode(val || '')); };
+  const handleRegenerate = async () => {
+    toast.loading('Synthesizing fresh coding challenges...', { id: 'regen-code' });
+    const res = await dispatch(fetchCodingProblems({ forceNew: true }));
+    toast.dismiss('regen-code');
+    if (res.type === 'coding/fetchProblems/fulfilled') {
+      toast.success('Generated brand-new coding challenges');
+    }
+  };
+
+  const handleEditorChange = (val) => {
+    dispatch(setCode(val || ''));
+  };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 text-sm">Generating AI Coding Challenges tailored to your ATS level...</p>
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs text-slate-300">Formulating algorithmic challenges for {domain}...</p>
       </div>
     );
   }
 
   if (!selectedProblem) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-3xl font-bold text-white mb-2">Coding Assessment</h1>
-        <p className="text-gray-400 mb-6">Select a problem to begin coding.</p>
-        <div className="mb-8 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-sm text-gray-300 flex items-center justify-between">
-          <span>
-            {atsScore ? `🎯 AI has customized these coding problems for your resume ATS Score of ${atsScore}%` : 'ℹ️ No resume uploaded. Using a simulated ATS Score of 75% for dynamic AI coding challenges.'}
-          </span>
-          {!atsScore && <Link to="/resume" className="text-indigo-400 hover:underline">Upload Resume</Link>}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-6xl mx-auto space-y-6">
+        <div className="pb-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Interactive Coding Assessment</h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">Data structures and algorithms grounded in your target engineering stack.</p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={handleRegenerate}
+            disabled={loading}
+            icon={<FiRefreshCw className={loading ? 'animate-spin' : ''} />}
+          >
+            Regenerate Problems
+          </Button>
         </div>
+
+        {/* Domain Context Banner */}
+        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <FiLayers className="text-blue-400 w-4 h-4 shrink-0" />
+              <span>Target Domain: <strong className="text-white">{domain}</strong> ({targetRole})</span>
+              <span className="text-slate-600">·</span>
+              <span className="font-mono text-slate-400">ATS Rating: {currentAtsScore}%</span>
+            </div>
+            {!atsScore && (
+              <Link to="/resume" className="text-xs text-blue-400 hover:text-blue-300">
+                Calibrate Resume →
+              </Link>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {problems.map((p) => (
-            <motion.div key={p.id} whileHover={{ y: -2 }} onClick={() => { dispatch(selectProblem(p)); }}
-              className="glass-card glass-card-hover p-5 cursor-pointer">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-white font-semibold">{p.title}</h3>
-                <Badge variant={p.difficulty === 'Easy' ? 'success' : p.difficulty === 'Medium' ? 'warning' : 'error'}>{p.difficulty}</Badge>
+            <div
+              key={p.id}
+              onClick={() => { dispatch(selectProblem(p)); }}
+              className="glass-card p-5 cursor-pointer flex flex-col justify-between border border-slate-800 hover:border-blue-500/50 hover:bg-slate-800/40 transition-all"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <Badge variant={p.difficulty === 'Easy' ? 'success' : p.difficulty === 'Medium' ? 'warning' : 'error'}>
+                    {p.difficulty}
+                  </Badge>
+                  <span className="text-[11px] text-slate-400 font-mono">{p.topic}</span>
+                </div>
+                <h3 className="text-white font-semibold text-base mb-2">{p.title}</h3>
+                <p className="text-slate-400 text-xs line-clamp-3 leading-relaxed mb-4">{p.description}</p>
               </div>
-              <p className="text-gray-400 text-sm mb-3 line-clamp-2">{p.description}</p>
-              <Badge variant="info">{p.topic}</Badge>
-            </motion.div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-blue-400 font-medium">
+                <span>Solve in Editor</span>
+                <FiArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
           ))}
         </div>
       </motion.div>
@@ -83,85 +136,135 @@ const CodingPage = () => {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <button onClick={() => dispatch(selectProblem(null))} className="text-sm text-gray-400 hover:text-white mb-1">Back to Problems</button>
-          <h1 className="text-xl font-bold text-white">{selectedProblem.title}</h1>
-        </div>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="flex flex-wrap items-center justify-between pb-2 border-b border-slate-800 gap-3">
         <div className="flex items-center gap-3">
-          <select value={language} onChange={(e) => dispatch(setLanguage(e.target.value))}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
-            {languages.map(l => <option key={l.value} value={l.value} className="bg-gray-900">{l.label}</option>)}
+          <button
+            onClick={() => dispatch(selectProblem(null))}
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+          >
+            ← Problems
+          </button>
+          <h1 className="text-base font-bold text-white">{selectedProblem.title}</h1>
+          <Badge variant={selectedProblem.difficulty === 'Easy' ? 'success' : selectedProblem.difficulty === 'Medium' ? 'warning' : 'error'}>
+            {selectedProblem.difficulty}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={language}
+            onChange={(e) => dispatch(setLanguage(e.target.value))}
+            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          >
+            {languages.map((l) => (
+              <option key={l.value} value={l.value} className="bg-slate-900">
+                {l.label}
+              </option>
+            ))}
           </select>
-          <Button variant="secondary" onClick={handleRun} loading={isRunning} icon={<FiPlay />} size="sm">Run</Button>
-          <Button onClick={handleSubmit} loading={isRunning} icon={<FiSend />} size="sm">Submit</Button>
+          <Button variant="secondary" onClick={handleRun} loading={isRunning} icon={<FiPlay />} size="sm">
+            Run Tests
+          </Button>
+          <Button onClick={handleSubmit} loading={isRunning} icon={<FiSend />} size="sm">
+            Submit Solution
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ height: 'calc(100vh - 180px)' }}>
-        {/* Problem Description */}
-        <div className="glass-card p-6 overflow-y-auto">
-          <h3 className="text-white font-semibold mb-2">Description</h3>
-          <p className="text-gray-300 text-sm leading-relaxed mb-4">{selectedProblem.description}</p>
-          <h4 className="text-white font-semibold text-sm mb-2">Constraints</h4>
-          <ul className="space-y-1 mb-4">
-            {selectedProblem.constraints.map((c, i) => <li key={i} className="text-sm text-gray-400">- {c}</li>)}
-          </ul>
-          <h4 className="text-white font-semibold text-sm mb-2">Examples</h4>
-          {selectedProblem.examples.map((ex, i) => (
-            <div key={i} className="bg-white/5 rounded-lg p-3 mb-2 text-sm">
-              <p className="text-gray-300"><span className="text-indigo-400">Input:</span> {ex.input}</p>
-              <p className="text-gray-300"><span className="text-emerald-400">Output:</span> {ex.output}</p>
-              {ex.explanation && <p className="text-gray-400 mt-1"><span className="text-amber-400">Explanation:</span> {ex.explanation}</p>}
-            </div>
-          ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ minHeight: 'calc(100vh - 180px)' }}>
+        {/* Problem Description & Results */}
+        <div className="glass-card p-6 border border-slate-800 overflow-y-auto space-y-5 flex flex-col justify-between">
+          <div>
+            <h3 className="text-slate-200 font-semibold text-sm mb-2">Problem Statement</h3>
+            <p className="text-slate-300 text-xs leading-relaxed mb-4 whitespace-pre-line">{selectedProblem.description}</p>
 
-          {/* Submission Results */}
-          {isSubmitted && submissionResult && (
-            <div className="mt-4">
-              <h4 className="text-white font-semibold text-sm mb-2">Submission Result</h4>
-              <div className="flex items-center gap-2 mb-2">
-                <Badge variant="success">{submissionResult.passed}/{submissionResult.total} Passed</Badge>
-                <Badge variant="info">Quality: {submissionResult.codeQuality}%</Badge>
+            {selectedProblem.constraints && selectedProblem.constraints.length > 0 && (
+              <>
+                <h4 className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 mb-2">Constraints</h4>
+                <ul className="space-y-1 mb-4 text-xs text-slate-300 font-mono">
+                  {selectedProblem.constraints.map((c, i) => (
+                    <li key={i}>• {c}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            <h4 className="text-[11px] font-semibold tracking-wider uppercase text-slate-400 mb-2">Test Examples</h4>
+            {selectedProblem.examples?.map((ex, i) => (
+              <div key={i} className="bg-slate-900 border border-slate-800 rounded-lg p-3 mb-2 text-xs font-mono">
+                <p className="text-slate-300 mb-1"><span className="text-blue-400 font-semibold">Input:</span> {ex.input}</p>
+                <p className="text-slate-300 mb-1"><span className="text-emerald-400 font-semibold">Output:</span> {ex.output}</p>
+                {ex.explanation && (
+                  <p className="text-slate-400 mt-1 font-sans"><span className="text-amber-400 font-semibold">Note:</span> {ex.explanation}</p>
+                )}
               </div>
-              <div className="space-y-2 mb-3">
-                <p className="text-xs text-gray-400">Time: {submissionResult.timeComplexity} | Space: {submissionResult.spaceComplexity}</p>
+            ))}
+          </div>
+
+          <div>
+            {output && (
+              <div className="mt-4 p-3.5 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                    <FiTerminal className="w-3.5 h-3.5 text-blue-400" /> Test Output
+                  </span>
+                </div>
+                <pre className="text-slate-200 whitespace-pre-wrap">{output}</pre>
               </div>
-              <h5 className="text-xs font-semibold text-gray-300 mb-1">AI Suggestions:</h5>
-              {submissionResult.suggestions.map((s, i) => (
-                <p key={i} className="text-xs text-gray-400 py-1">- {s}</p>
-              ))}
-              <div className="mt-4">
-                <Link to="/interview/technical">
-                  <Button icon={<FiArrowRight />} iconPosition="right">
-                    Proceed to Technical Interview
-                  </Button>
-                </Link>
+            )}
+
+            {isSubmitted && submissionResult && (
+              <div className="mt-4 p-4 rounded-lg bg-slate-900 border border-blue-500/40 text-xs">
+                <h4 className="text-white font-semibold text-sm mb-2">AI Code Review & Quality Score</h4>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="success">{submissionResult.passed}/{submissionResult.total} Cases Passed</Badge>
+                  <Badge variant="info">Quality: {submissionResult.codeQuality}%</Badge>
+                  <span className="text-slate-400 font-mono">Time Complexity: {submissionResult.timeComplexity}</span>
+                </div>
+                <div className="space-y-1 my-2">
+                  {submissionResult.suggestions?.map((s, i) => (
+                    <p key={i} className="text-slate-300">• {s}</p>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <Link to="/interview/technical">
+                    <Button icon={<FiArrowRight />} iconPosition="right" size="sm">
+                      Proceed to Technical Round
+                    </Button>
+                  </Link>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Code Editor + Output */}
-        <div className="flex flex-col gap-2" style={{ minHeight: 0 }}>
-          <div className="flex-1 rounded-xl overflow-hidden border border-white/10">
+        {/* Code Editor */}
+        <div className="glass-card overflow-hidden flex flex-col border border-slate-800">
+          <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
+            <span className="flex items-center gap-2">
+              <FiCode className="text-blue-400" />
+              solution.{language === 'javascript' ? 'js' : language === 'python' ? 'py' : 'java'}
+            </span>
+            <span>Target: {domain}</span>
+          </div>
+          <div className="flex-1 min-h-[450px]">
             <Editor
               height="100%"
-              language={language}
-              theme="vs-dark"
+              language={language === 'python' ? 'python' : language === 'java' ? 'java' : 'javascript'}
               value={code}
+              theme="vs-dark"
               onChange={handleEditorChange}
-              options={{ minimap: { enabled: false }, fontSize: 14, padding: { top: 12 }, scrollBeyondLastLine: false, wordWrap: 'on' }}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                padding: { top: 12 },
+                scrollBeyondLastLine: false,
+                lineNumbers: 'on',
+                roundedSelection: false,
+                fontFamily: 'JetBrains Mono, Menlo, monospace',
+              }}
             />
-          </div>
-          <div className="glass-card p-4 h-32 overflow-y-auto">
-            <h4 className="text-xs font-semibold text-gray-400 mb-2">Output</h4>
-            {output ? (
-              <pre className="text-sm text-emerald-400 font-mono whitespace-pre-wrap">{output}</pre>
-            ) : (
-              <p className="text-sm text-gray-500">Run your code to see output here.</p>
-            )}
           </div>
         </div>
       </div>

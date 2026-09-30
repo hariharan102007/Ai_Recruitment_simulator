@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiArrowRight, FiArrowLeft, FiClock, FiActivity } from 'react-icons/fi';
-import { Button, Card, Badge, ProgressBar, Textarea } from '@/components/ui';
-import { generateInterviewQuestionsForStage, evaluateStageAnswersWithAI } from '@/services/aiService';
+import { FiArrowRight, FiArrowLeft, FiClock, FiActivity, FiRefreshCw, FiLayers, FiCheckCircle } from 'react-icons/fi';
+import { Button, Badge, ProgressBar, Textarea } from '@/components/ui';
+import { generateInterviewQuestionsForStage, evaluateStageAnswersWithAI, inferDomainAndSkills } from '@/services/aiService';
 import { updateScore } from '@/store/analyticsSlice';
 import { updateStageStatus } from '@/store/interviewSlice';
 import toast from 'react-hot-toast';
@@ -12,11 +12,12 @@ import toast from 'react-hot-toast';
 const TechnicalInterview = () => {
   const dispatch = useDispatch();
   
-  // Select ATS score and profile info from Redux
   const atsScore = useSelector((state) => state.resume.atsScore || 75);
-  const isSimulatedATS = !useSelector((state) => state.resume.atsScore);
-  const targetRole = useSelector((state) => state.resume.atsReport?.targetRole || 'Full Stack Developer');
+  const targetRole = useSelector((state) => state.resume.targetRole || state.resume.atsReport?.targetRole || 'Full Stack Developer');
   const resumeText = useSelector((state) => state.resume.parsedText || '');
+  const atsReport = useSelector((state) => state.resume.atsReport);
+
+  const { domain, skills, projects } = inferDomainAndSkills(resumeText, targetRole, atsReport);
 
   const [questions, setQuestions] = useState([]);
   const [current, setCurrent] = useState(0);
@@ -26,9 +27,8 @@ const TechnicalInterview = () => {
   const [submitted, setSubmitted] = useState(false);
   const [evaluation, setEvaluation] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const [retryCount, setRetryCount] = useState(0);
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (forceNew = false) => {
     try {
       setLoading(true);
       setErrorMessage('');
@@ -36,20 +36,23 @@ const TechnicalInterview = () => {
         stageId: 'technical',
         atsScore,
         targetRole,
-        resumeText
+        resumeText,
+        projects,
+        forceNew
       });
 
       const nextQuestions = Array.isArray(data?.questions) ? data.questions : [];
       setQuestions(nextQuestions);
+      setCurrent(0);
 
       if (nextQuestions.length === 0) {
-        throw new Error('No questions returned by the AI service.');
+        throw new Error('No questions returned by AI engine.');
       }
     } catch (error) {
       console.error('Failed to generate technical questions:', error);
       setQuestions([]);
-      setErrorMessage('No interview questions available. Please try again.');
-      toast.error('Failed to load dynamic AI questions.');
+      setErrorMessage('No questions available. Please click retry.');
+      toast.error('Failed to load technical questions.');
     } finally {
       setLoading(false);
     }
@@ -57,10 +60,13 @@ const TechnicalInterview = () => {
 
   useEffect(() => {
     fetchQuestions();
-  }, [atsScore, targetRole, resumeText, retryCount]);
+  }, [atsScore, targetRole, resumeText]);
 
-  const handleRetry = () => {
-    setRetryCount((count) => count + 1);
+  const handleRegenerate = async () => {
+    toast.loading('Synthesizing fresh technical questions...', { id: 'regen-tech' });
+    await fetchQuestions(true);
+    toast.dismiss('regen-tech');
+    toast.success('Generated brand-new technical questions');
   };
 
   const handleAnswer = (val) => {
@@ -72,7 +78,7 @@ const TechnicalInterview = () => {
   const handleSubmit = async () => {
     const totalAnswered = Object.keys(answers).length;
     if (totalAnswered === 0) {
-      return toast.error('Please answer at least one question before submitting.');
+      return toast.error('Please formulate at least one response before submission.');
     }
 
     try {
@@ -85,15 +91,14 @@ const TechnicalInterview = () => {
       });
       setEvaluation(evalData);
       
-      // Save overall score to analytics and update stage status
       dispatch(updateScore({ stage: 'technical', score: evalData.overallScore }));
       dispatch(updateStageStatus({ stageId: 'technical', status: 'completed' }));
       
       setSubmitted(true);
-      toast.success('Interview evaluated successfully by AI!');
+      toast.success('Technical interview evaluation complete');
     } catch (error) {
       console.error('Evaluation failed:', error);
-      toast.error('AI Evaluation failed. Please try again.');
+      toast.error('Evaluation failed. Please retry.');
     } finally {
       setEvaluating(false);
     }
@@ -102,8 +107,8 @@ const TechnicalInterview = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 text-sm">AI is designing technical interview questions tailored for ATS Score: {atsScore}%...</p>
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs text-slate-300">Generating technical architectural questions for {domain}...</p>
       </div>
     );
   }
@@ -111,42 +116,52 @@ const TechnicalInterview = () => {
   if (evaluating) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 text-sm">AI is evaluating your technical interview answers...</p>
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs text-slate-300">Evaluating technical depth and conceptual accuracy...</p>
       </div>
     );
   }
 
   if (submitted && evaluation) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-3xl font-bold text-white mb-8">Technical Interview - Scorecard</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto space-y-6">
+        <div className="pb-2 border-b border-slate-800">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Technical Assessment Scorecard</h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">Evaluation telemetry for {targetRole} ({domain}).</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {evaluation.scores?.map((s, i) => (
-            <div key={i} className="glass-card p-5">
-              <ProgressBar label={s.label} value={s.value} color="indigo" />
+            <div key={i} className="glass-card p-4 border border-slate-800">
+              <ProgressBar label={s.label} value={s.value} color="blue" />
             </div>
           ))}
         </div>
-        <div className="glass-card p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <FiActivity className="text-indigo-400" />
-            AI Feedback & Analysis
+
+        <div className="glass-card p-6 border border-slate-800">
+          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <FiActivity className="text-blue-400" /> AI Evaluation Feedback
           </h3>
-          <div className="space-y-2 text-sm text-gray-300">
+          <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
             {evaluation.feedback?.map((fb, idx) => (
               <p key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                 {fb}
               </p>
             ))}
           </div>
         </div>
-        <Link to="/interview/project">
-          <Button icon={<FiArrowRight />} iconPosition="right">
-            Proceed to Project Discussion
+
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => { setSubmitted(false); fetchQuestions(true); }} icon={<FiRefreshCw />}>
+            Retake Round
           </Button>
-        </Link>
+          <Link to="/interview/project">
+            <Button icon={<FiArrowRight />} iconPosition="right">
+              Proceed to Project Architecture
+            </Button>
+          </Link>
+        </div>
       </motion.div>
     );
   }
@@ -154,49 +169,58 @@ const TechnicalInterview = () => {
   const q = questions[current];
   if (!q) {
     return (
-      <div className="text-center py-20 text-gray-400 space-y-4">
-        <p>{errorMessage || 'No interview questions available. Please try again.'}</p>
-        <Button onClick={handleRetry} variant="secondary">
-          Try Again
+      <div className="text-center py-20 text-slate-400 space-y-3">
+        <p className="text-xs">{errorMessage || 'No questions available.'}</p>
+        <Button onClick={() => fetchQuestions(true)} variant="secondary" icon={<FiRefreshCw />} size="sm">
+          Retry
         </Button>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex flex-wrap items-center justify-between pb-2 border-b border-slate-800 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Technical Interview</h1>
-          <p className="text-sm text-gray-400">
-            Question {current + 1} of {questions.length} &middot; {q.category}
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-white">Technical Architecture Round</h1>
+            <Badge variant="info">{q.category || domain}</Badge>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Question {current + 1} of {questions.length}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-gray-400">
-          <FiClock className="w-4 h-4" />
-          <span>15:00</span>
-        </div>
-      </div>
-      
-      {/* ATS score notification */}
-      <div className="mb-6 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/50 text-xs text-indigo-300">
-        {isSimulatedATS 
-          ? `ℹ️ Using simulated ATS Score (75%) to generate questions.`
-          : `🎯 Questions generated by AI based on your custom ATS Score: ${atsScore}%`}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleRegenerate}
+          disabled={loading}
+          icon={<FiRefreshCw className={loading ? 'animate-spin' : ''} />}
+        >
+          Regenerate Questions
+        </Button>
       </div>
 
-      <div className="glass-card p-8 mb-6">
-        <Badge variant="info" className="mb-4">{q.category}</Badge>
-        <p className="text-white text-lg font-medium mb-6">{q.question}</p>
+      {/* Domain Context Banner */}
+      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <FiLayers className="text-blue-400 shrink-0" />
+          <span>Resume Stack: <strong className="text-white">{domain}</strong> ({targetRole}) · ATS {atsScore}%</span>
+        </div>
+        <span className="font-mono text-slate-400">Technical Depth</span>
+      </div>
+
+      <div className="glass-card p-6 border border-slate-800 space-y-4">
+        <p className="text-white text-base font-medium leading-relaxed">{q.question}</p>
         <Textarea 
           value={answers[q.id] || ''} 
           onChange={(e) => handleAnswer(e.target.value)}
-          placeholder="Type your answer here... Be specific and provide examples." 
-          className="min-h-[200px]" 
+          placeholder="Articulate your technical response... Detail architectural patterns, performance trade-offs, and design principles." 
+          className="min-h-[200px] bg-slate-900 border-slate-700 text-xs leading-relaxed" 
         />
       </div>
       
-      <div className="flex justify-between">
+      <div className="flex justify-between items-center">
         <Button 
           variant="secondary" 
           onClick={() => setCurrent(Math.max(0, current - 1))} 
@@ -207,11 +231,11 @@ const TechnicalInterview = () => {
         </Button>
         {current < questions.length - 1 ? (
           <Button onClick={() => setCurrent(current + 1)} icon={<FiArrowRight />} iconPosition="right">
-            Next
+            Next Question
           </Button>
         ) : (
           <Button onClick={handleSubmit} variant="success">
-            Submit Interview
+            Submit Technical Round
           </Button>
         )}
       </div>

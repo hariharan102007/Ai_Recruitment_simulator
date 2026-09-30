@@ -1,6 +1,6 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { useCallback } from 'react';
-import { loginUser, registerUser, logout } from '@/store/authSlice';
+import { loginUser, registerUser, loginWithGoogleThunk, logout } from '@/store/authSlice';
 
 export const useAuth = () => {
   const dispatch = useDispatch();
@@ -8,6 +8,10 @@ export const useAuth = () => {
 
   const login = useCallback((email, password) => {
     return dispatch(loginUser({ email, password }));
+  }, [dispatch]);
+
+  const loginWithGoogle = useCallback(() => {
+    return dispatch(loginWithGoogleThunk());
   }, [dispatch]);
 
   const register = useCallback((userData) => {
@@ -18,5 +22,5 @@ export const useAuth = () => {
     dispatch(logout());
   }, [dispatch]);
 
-  return { user, isAuthenticated, loading, error, login, register, logout: logoutUser };
+  return { user, isAuthenticated, loading, error, login, loginWithGoogle, register, logout: logoutUser };
 };

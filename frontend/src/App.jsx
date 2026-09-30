@@ -1,5 +1,10 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/firebase/firebase';
+import { syncUserProfile } from '@/firebase/firestoreService';
+import { updateUser } from '@/store/authSlice';
 
 // Layouts
 import LandingLayout from '@/components/layout/LandingLayout';
@@ -12,7 +17,6 @@ import RoleRoute from '@/routes/RoleRoute';
 
 // Public Pages
 import LandingPage from '@/pages/Landing/LandingPage';
-import PricingPage from '@/pages/Pricing/PricingPage';
 
 // Auth Pages
 import LoginPage from '@/pages/Auth/LoginPage';
@@ -33,6 +37,7 @@ import VoiceInterviewPage from '@/pages/VoiceInterview/VoiceInterviewPage';
 import CompanyMode from '@/pages/Company/CompanyMode';
 import AnalyticsDashboard from '@/pages/Analytics/AnalyticsDashboard';
 import FinalReport from '@/pages/Reports/FinalReport';
+import SettingsPage from '@/pages/Settings/SettingsPage';
 
 // Admin
 import AdminPanel from '@/pages/Admin/AdminPanel';
@@ -41,15 +46,54 @@ import AdminPanel from '@/pages/Admin/AdminPanel';
 import NotFoundPage from '@/pages/NotFound/NotFoundPage';
 
 function App() {
+  const dispatch = useDispatch();
+  const colorTheme = useSelector((state) => state.ui?.colorTheme || 'teal');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-color-theme', colorTheme);
+  }, [colorTheme]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const synced = await syncUserProfile({
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName || 'Candidate',
+            email: firebaseUser.email || '',
+          });
+          const token = await firebaseUser.getIdToken();
+          const userObj = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'Candidate',
+            email: firebaseUser.email || '',
+            photoURL: firebaseUser.photoURL || '',
+            targetRole: synced?.targetRole || 'Full Stack Developer',
+            experienceLevel: synced?.experienceLevel || 'Mid-Level',
+            role: 'candidate',
+          };
+          localStorage.setItem('user', JSON.stringify(userObj));
+          localStorage.setItem('token', token);
+          dispatch(updateUser(userObj));
+        } catch (err) {
+          console.warn('Firebase user sync:', err);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [dispatch]);
+
   return (
     <Routes>
-      {/* Public Routes (Landing Layout with Navbar + Footer) */}
+      {/* Public Routes */}
       <Route element={<LandingLayout />}>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        {/* Redirect any legacy pricing visits directly to dashboard */}
+        <Route path="/pricing" element={<Navigate to="/dashboard" replace />} />
       </Route>
 
-      {/* Auth Routes (Auth Layout with animated background) */}
+      {/* Auth Routes */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -57,7 +101,7 @@ function App() {
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       </Route>
 
-      {/* Protected Dashboard Routes (Dashboard Layout with Sidebar + Navbar) */}
+      {/* Protected Dashboard Routes */}
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<CandidateDashboard />} />
         <Route path="/resume" element={<ResumePage />} />
@@ -73,9 +117,11 @@ function App() {
         <Route path="/analytics" element={<AnalyticsDashboard />} />
         <Route path="/report" element={<FinalReport />} />
         <Route path="/reports" element={<FinalReport />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/profile" element={<SettingsPage />} />
       </Route>
 
-      {/* Admin Routes (restricted by role) */}
+      {/* Admin Routes */}
       <Route element={<ProtectedRoute><RoleRoute allowedRoles={["admin"]}><DashboardLayout /></RoleRoute></ProtectedRoute>}>
         <Route path="/admin" element={<AdminPanel />} />
       </Route>

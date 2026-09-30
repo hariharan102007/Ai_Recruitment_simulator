@@ -46,19 +46,32 @@ const initialState = {
   loading: false,
 };
 
-export const fetchQuestions = createAsyncThunk('aptitude/fetchQuestions', async ({ category, difficulty }, { getState, rejectWithValue }) => {
-  try {
-    const state = getState();
-    const atsScore = state.resume.atsScore || 75;
-    const resumeText = state.resume.parsedText || '';
-    
-    const response = await generateAIAptitudeQuestions({ category, difficulty, atsScore, resumeText });
-    return response.questions || [];
-  } catch (error) {
-    console.error('Error in fetchQuestions thunk:', error);
-    return rejectWithValue('Failed to fetch AI questions');
+export const fetchQuestions = createAsyncThunk(
+  'aptitude/fetchQuestions',
+  async ({ category, difficulty, forceNew = false }, { getState, rejectWithValue }) => {
+    try {
+      const state = getState();
+      const atsScore = state.resume.atsScore || 75;
+      const resumeText = state.resume.parsedText || '';
+      const targetRole = state.resume.targetRole || state.resume.atsReport?.targetRole || 'Full Stack Developer';
+      const matchedSkills = state.resume.atsReport?.matchedSkills || [];
+
+      const response = await generateAIAptitudeQuestions({
+        category,
+        difficulty,
+        atsScore,
+        resumeText,
+        targetRole,
+        matchedSkills,
+        forceNew,
+      });
+      return response.questions || [];
+    } catch (error) {
+      console.error('Error in fetchQuestions thunk:', error);
+      return rejectWithValue('Failed to fetch AI questions');
+    }
   }
-});
+);
 
 const aptitudeSlice = createSlice({
   name: 'aptitude',

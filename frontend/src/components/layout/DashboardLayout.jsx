@@ -8,15 +8,15 @@ const DashboardLayout = () => {
   const { sidebarOpen } = useSelector((state) => state.ui);
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-[#090D16] text-slate-100 flex flex-col">
       <Navbar />
       <Sidebar />
       <motion.main
-        animate={{ marginLeft: sidebarOpen ? 256 : 72 }}
-        transition={{ duration: 0.2 }}
-        className="pt-16 min-h-screen"
+        animate={{ marginLeft: sidebarOpen ? 240 : 64 }}
+        transition={{ duration: 0.15 }}
+        className="pt-16 min-h-screen flex-1"
       >
-        <div className="p-6">
+        <div className="p-6 max-w-7xl mx-auto">
           <Outlet />
         </div>
       </motion.main>

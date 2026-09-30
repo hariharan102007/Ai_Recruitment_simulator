@@ -12,30 +12,25 @@ const Footer = () => (
             </div>
             <span className="text-white font-bold text-lg">RecruitAI</span>
           </div>
-          <p className="text-gray-400 text-sm">AI-powered recruitment simulator to help you ace your dream job interview.</p>
-          <div className="flex gap-3 mt-4">
-            {[FiGithub, FiTwitter, FiLinkedin, FiMail].map((Icon, i) => (
-              <a key={i} href="#" className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"><Icon className="w-4 h-4" /></a>
-            ))}
-          </div>
+          <p className="text-gray-400 text-sm">100% Free AI-powered recruitment process simulator to help you ace your dream interview.</p>
         </div>
         {[
-          { title: 'Product', links: ['Features', 'Pricing', 'API', 'Integrations'] },
-          { title: 'Company', links: ['About', 'Blog', 'Careers', 'Contact'] },
-          { title: 'Legal', links: ['Privacy', 'Terms', 'Cookie Policy', 'Licenses'] },
+          { title: 'Practice Rounds', links: ['Resume ATS', 'Aptitude Test', 'Live Coding', 'Technical Interview', 'Voice Mode'] },
+          { title: 'Platform', links: ['About', 'Dashboard', 'Analytics', 'System Design'] },
+          { title: 'Settings & Data', links: ['Settings', 'Candidate Profile', 'Reset Data'] },
         ].map((col) => (
           <div key={col.title}>
             <h3 className="text-white font-semibold text-sm mb-4">{col.title}</h3>
             <ul className="space-y-2">
               {col.links.map((link) => (
-                <li key={link}><a href="#" className="text-gray-400 text-sm hover:text-white transition-colors">{link}</a></li>
+                <li key={link}><span className="text-gray-400 text-sm hover:text-white transition-colors cursor-pointer">{link}</span></li>
               ))}
             </ul>
           </div>
         ))}
       </div>
       <div className="mt-8 pt-8 border-t border-white/5 text-center">
-        <p className="text-gray-500 text-sm">&copy; {new Date().getFullYear()} RecruitAI. All rights reserved.</p>
+        <p className="text-gray-500 text-sm">&copy; {new Date().getFullYear()} RecruitAI. All rights reserved. Free & Open Access.</p>
       </div>
     </div>
   </footer>

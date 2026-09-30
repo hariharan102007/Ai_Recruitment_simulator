@@ -2,27 +2,27 @@ import { forwardRef } from 'react';
 import { motion } from 'framer-motion';
 
 const variants = {
-  primary: 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/25',
-  secondary: 'bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-white/20',
-  ghost: 'text-gray-300 hover:text-white hover:bg-white/5',
-  danger: 'bg-red-600 text-white hover:bg-red-500',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-500',
+  primary: 'bg-blue-600 text-white hover:bg-blue-500 shadow-sm border border-blue-500/50 transition-colors',
+  secondary: 'bg-slate-800/90 border border-slate-700/80 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors',
+  ghost: 'text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors',
+  danger: 'bg-red-600/90 text-white hover:bg-red-500 border border-red-500/30 transition-colors',
+  success: 'bg-emerald-600/90 text-white hover:bg-emerald-500 border border-emerald-500/30 transition-colors',
+  brand: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-sm transition-all',
 };
 
 const sizes = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-3 text-base',
-  xl: 'px-8 py-4 text-lg',
+  sm: 'px-3 py-1.5 text-xs rounded-lg',
+  md: 'px-4 py-2 text-sm rounded-lg',
+  lg: 'px-5 py-2.5 text-base rounded-lg',
+  xl: 'px-7 py-3 text-base rounded-xl font-semibold',
 };
 
 const Button = forwardRef(({ children, variant = 'primary', size = 'md', className = '', loading = false, disabled = false, icon, iconPosition = 'left', ...props }, ref) => {
   return (
     <motion.button
       ref={ref}
-      whileHover={{ scale: disabled ? 1 : 1.02 }}
       whileTap={{ scale: disabled ? 1 : 0.98 }}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer ${variants[variant] || variants.primary} ${sizes[size]} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

@@ -19,14 +19,14 @@ const initialState = {
 
 export const fetchCodingProblems = createAsyncThunk(
   'coding/fetchProblems',
-  async (_, { getState, rejectWithValue }) => {
+  async ({ forceNew = false } = {}, { getState, rejectWithValue }) => {
     try {
       const state = getState();
       const atsScore = state.resume.atsScore || 75;
-      const targetRole = state.resume.atsReport?.targetRole || 'Full Stack Developer';
+      const targetRole = state.resume.targetRole || state.resume.atsReport?.targetRole || 'Full Stack Developer';
       const resumeText = state.resume.parsedText || '';
 
-      const response = await generateAICodingProblems({ atsScore, targetRole, resumeText });
+      const response = await generateAICodingProblems({ atsScore, targetRole, resumeText, forceNew });
       return response.problems || [];
     } catch (error) {
       console.error('Error fetching coding problems:', error);
