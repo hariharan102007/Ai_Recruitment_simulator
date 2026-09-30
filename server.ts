@@ -3,11 +3,11 @@ import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
-// Backend DB & routes
-import { connectDB } from './backend/config/db.js';
+// Backend routes
 import authRoutes from './backend/routes/authRoutes.js';
 import aptitudeRoutes from './backend/routes/aptitudeRoutes.js';
 import codingRoutes from './backend/routes/codingRoutes.js';
@@ -20,9 +20,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// Connect DB (graceful offline fallback if MONGODB_URI is not provided)
-connectDB().catch((err) => {
-  console.warn('MongoDB connection notice:', err?.message || err);
+// Catch unhandled errors gracefully to prevent container restart loops
+process.on('uncaughtException', (err) => {
+  console.error('[Process uncaughtException]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process unhandledRejection]:', reason);
 });
 
 // Middleware
@@ -30,7 +33,7 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Health Check
+// Health Check (Instant 200 for cloud readiness & liveness probes)
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
@@ -138,11 +141,26 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   next(err);
 });
 
-// Vite middleware for Dev vs Static serving for Production
-const isProduction = process.env.NODE_ENV === 'production';
+// Static Assets & Production Single Page Application Router
+const distPath = path.resolve(__dirname, 'frontend', 'dist');
+const indexPath = path.resolve(distPath, 'index.html');
 
 async function startServer() {
-  if (!isProduction) {
+  const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(indexPath);
+
+  if (isProduction && fs.existsSync(indexPath)) {
+    console.log(`📦 Serving production build from: ${distPath}`);
+    app.use(express.static(distPath, { maxAge: '1d', index: false }));
+
+    // Express 5 SPA catch-all fallback
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api')) {
+        return res.sendFile(indexPath);
+      }
+      next();
+    });
+  } else {
+    console.log('⚡ Initializing Vite development server');
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
@@ -153,18 +171,15 @@ async function startServer() {
       root: path.resolve(__dirname, 'frontend'),
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'frontend', 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Recruitment Simulator Server running on http://0.0.0.0:${PORT}`);
     console.log(`🤖 Gemini AI configured: ${!!process.env.GEMINI_API_KEY}`);
   });
+
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 }
 
 startServer().catch((err) => {
